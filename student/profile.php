@@ -8,30 +8,6 @@ if (!isset($_SESSION['student_id'])) {
 
 $student_id = $_SESSION['student_id'];
 
-if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['update_profile'])) {
-    $full_name = $_POST['full_name'];
-    $email = $_POST['email'];
-    $contact = $_POST['contact_number'];
-    $address = $_POST['address'];
-
-    $update_sql = "UPDATE students SET full_name = ?, email = ?, contact_number = ?, address = ? WHERE student_id = ?";
-    $stmt = $conn->prepare($update_sql);
-    $stmt->bind_param("sssss", $full_name, $email, $contact, $address, $student_id);
-
-    if ($stmt->execute()) {
-?>
-        <div id="profileSuccessContent" class="success-container">
-            <div class="check-icon purple-theme">✔</div>
-            <h2>Profile Updated!</h2>
-            <p>Your personal information has been successfully updated.</p>
-            <button type="button" onclick="location.reload()" class="btn-action btn-purple">Close</button>
-        </div>
-<?php
-        exit();
-    }
-    exit();
-}
-
 $sql = "SELECT * FROM students WHERE student_id = ?";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("s", $student_id);
@@ -39,38 +15,138 @@ $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
 ?>
 
-<div id="profileFormContainer">
-    <form id="profileForm">
-        <div class="form-group">
-            <label>Full Name</label>
-            <input type="text" name="full_name" value="<?php echo htmlspecialchars($user['full_name']); ?>" required>
+<div id="profileViewContainer">
+    <div class="profile-view-card">
+        <div class="profile-avatar">
+           
+            <p class="profile-note">Information cannot be modified after registration</p>
         </div>
-
-        <div class="form-group">
-            <label>Student ID</label>
-            <input type="text" class="readonly-input" value="<?php echo htmlspecialchars($user['student_id']); ?>" readonly>
+        
+        <div class="profile-info-grid">
+            <div class="info-row">
+                <div class="info-label">Full Name</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['full_name']); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Student ID</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['student_id']); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Email Address</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['email']); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Course</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['course']); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Year Level</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['year_level']); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Contact Number</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['contact_number'] ?: 'Not provided'); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Home Address</div>
+                <div class="info-value"><?php echo htmlspecialchars($user['address'] ?: 'Not provided'); ?></div>
+            </div>
+            
+            <div class="info-row">
+                <div class="info-label">Registered On</div>
+                <div class="info-value"><?php echo date('F d, Y', strtotime($user['created_at'])); ?></div>
+            </div>
         </div>
-
-        <div class="form-group">
-            <label>Email Address</label>
-            <input type="email" name="email" value="<?php echo htmlspecialchars($user['email']); ?>" required>
+        
+        <div class="profile-footer-note">
+            <p>⚠️ For any corrections to your personal information, please contact the Registrar's Office.</p>
         </div>
-
-        <div class="form-group">
-            <label>Course</label>
-            <input type="text" class="readonly-input" value="<?php echo htmlspecialchars($user['course']); ?>" readonly>
-        </div>
-
-        <div class="form-group">
-            <label>Contact Number</label>
-            <input type="text" name="contact_number" value="<?php echo htmlspecialchars($user['contact_number']); ?>">
-        </div>
-
-        <div class="form-group">
-            <label>Home Address</label>
-            <textarea name="address" rows="3"><?php echo htmlspecialchars($user['address']); ?></textarea>
-        </div>
-
-        <button type="submit" id="saveProfileBtn" class="btn-action btn-purple full-width">Save Changes</button>
-    </form>
+    </div>
 </div>
+
+<style>
+.profile-view-card {
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+.profile-avatar {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 25px;
+    text-align: center;
+}
+
+.avatar-circle {
+    font-size: 48px;
+    margin-bottom: 10px;
+}
+
+.profile-avatar h3 {
+    margin: 0 0 5px 0;
+    font-size: 20px;
+}
+
+.profile-note {
+    font-size: 12px;
+    opacity: 0.8;
+    margin: 0;
+}
+
+.profile-info-grid {
+    padding: 20px;
+}
+
+.info-row {
+    display: flex;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    width: 140px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.info-value {
+    flex: 1;
+    color: #555;
+}
+
+.profile-footer-note {
+    background: #fff3cd;
+    padding: 12px 20px;
+    font-size: 13px;
+    color: #856404;
+    border-top: 1px solid #ffeeba;
+}
+
+.profile-footer-note p {
+    margin: 0;
+}
+
+@media (max-width: 600px) {
+    .info-row {
+        flex-direction: column;
+        padding: 10px 0;
+    }
+    
+    .info-label {
+        width: 100%;
+        margin-bottom: 5px;
+    }
+}
+</style>

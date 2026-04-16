@@ -21,40 +21,86 @@ $app_stmt = $conn->prepare($app_sql);
 $app_stmt->bind_param("s", $student_id);
 $app_stmt->execute();
 $application = $app_stmt->get_result()->fetch_assoc();
+
+// Check reapplication eligibility
+$can_apply = true;
+$apply_disabled_message = '';
+
+if ($application) {
+    if ($application['status'] === 'Pending' || $application['status'] === 'Approved') {
+        $can_apply = false;
+        $apply_disabled_message = "You already have an active application. Only one application is accepted per student.";
+    } elseif ($application['status'] === 'Rejected') {
+        // Check if same semester
+        $last_app_date = $application['application_date'];
+        $last_app_year = date('Y', strtotime($last_app_date));
+        $last_app_month = date('m', strtotime($last_app_date));
+        $current_year = date('Y');
+        $current_month = date('m');
+        
+        $last_semester = '';
+        if ($last_app_month >= 8 && $last_app_month <= 12) {
+            $last_semester = 'Fall';
+        } elseif ($last_app_month >= 1 && $last_app_month <= 5) {
+            $last_semester = 'Spring';
+        } else {
+            $last_semester = 'Summer';
+        }
+        
+        $current_semester = '';
+        if ($current_month >= 8 && $current_month <= 12) {
+            $current_semester = 'Fall';
+        } elseif ($current_month >= 1 && $current_month <= 5) {
+            $current_semester = 'Spring';
+        } else {
+            $current_semester = 'Summer';
+        }
+        
+        if ($last_app_year == $current_year && $last_semester == $current_semester) {
+            $can_apply = false;
+            $apply_disabled_message = "Your previous application was rejected. You can only reapply in the next semester.";
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, initial-scale=1.0, viewport-fit=cover">
     <title>Student Dashboard - Scholarship System</title>
-    <link rel="stylesheet" href="../style/style.css">
+    <link rel="stylesheet" href="../student/style.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>
-
 <body>
-    <div class="dashboard-header">
-        <h2>Scholarship Portal</h2>
-        <div class="user-nav">
-            <span>Welcome, <strong><?php echo htmlspecialchars($student['full_name']); ?></strong></span>
-            <a href="logout.php" class="logout-btn">Logout</a>
-        </div>
+    <div class="page-title">
+        <h1>Scholarship Portal</h1>
     </div>
 
-    <div class="container dashboard-container">
-        <div class="welcome-card">
-            <h1>Welcome, <?php echo htmlspecialchars($student['full_name']); ?>!</h1>
-            <p>ID: <?php echo htmlspecialchars($student['student_id']); ?> | Course: <?php echo htmlspecialchars($student['course']); ?></p>
-        </div>
-
-        <div class="quick-actions">
-            <div class="action-card">
-                <h3>New Application</h3>
-                <p>Submit a new scholarship application for this semester.</p>
-                <a href="#" class="btn-action btn-apply-now">Apply Now →</a>
+    <div class="dashboard-page">
+    <div class="dashboard-wrapper">
+        <div class="container dashboard-container">
+            <div class="welcome-card">
+                <div class="welcome-content">
+                    <h1>Welcome, <?php echo htmlspecialchars($student['full_name']); ?>!</h1>
+                    <p>ID: <?php echo htmlspecialchars($student['student_id']); ?> | Course: <?php echo htmlspecialchars($student['course']); ?></p>
+                </div>
+                <div class="welcome-actions">
+                    <a href="logout.php" class="logout-btn">Logout</a>
+                </div>
             </div>
+
+            <div class="quick-actions">
+                <div class="action-card <?php echo !$can_apply ? 'disabled-card' : ''; ?>">
+                    <h3>New Application</h3>
+                    <p>Submit a new scholarship application for this semester.</p>
+                    <?php if ($can_apply): ?>
+                        <a href="#" class="btn-action btn-apply-now">Apply Now →</a>
+                    <?php else: ?>
+                        <div class="disabled-message"><?php echo htmlspecialchars($apply_disabled_message); ?></div>
+                    <?php endif; ?>
+                </div>
 
             <div class="action-card">
                 <h3>Application History</h3>
@@ -64,7 +110,7 @@ $application = $app_stmt->get_result()->fetch_assoc();
 
             <div class="action-card">
                 <h3>My Profile</h3>
-                <p>Update your personal and contact information.</p>
+                <p>View your personal information.</p>
                 <a href="#" class="btn-action btn-purple">View Profile →</a>
             </div>
         </div>
@@ -74,14 +120,23 @@ $application = $app_stmt->get_result()->fetch_assoc();
                 <h3>Latest Application Status</h3>
                 <div class="status-info">
                     <p><strong>Scholarship:</strong> <?php echo htmlspecialchars($application['scholarship_type']); ?></p>
+                    <p><strong>GPA:</strong> <?php echo number_format($application['gpa'], 2); ?></p>
                     <p><strong>Status:</strong>
                         <span class="status-badge status-<?php echo strtolower($application['status']); ?>">
                             <?php echo $application['status']; ?>
                         </span>
                     </p>
+                    <p><strong>Application Date:</strong> <?php echo date('F d, Y', strtotime($application['application_date'])); ?></p>
                 </div>
             </div>
+        <?php else: ?>
+            <div class="info-card">
+                <h3>No Application Yet</h3>
+                <p>You haven't submitted any scholarship application. Click "Apply Now" to get started.</p>
+            </div>
         <?php endif; ?>
+    </div>
+    </div>
     </div>
 
     <div id="applyModal" class="modal">
@@ -124,7 +179,6 @@ $application = $app_stmt->get_result()->fetch_assoc();
         <p>&copy; <?php echo date("Y"); ?> Scholarship Management System. All rights reserved.</p>
     </footer>
 
-    <script src="../student/script.js"></script>
+    <script src="script.js"></script>
 </body>
-
 </html>

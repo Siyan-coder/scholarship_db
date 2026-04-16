@@ -11,6 +11,28 @@ $(document).ready(function () {
             ? $(response).find("#applyFormContent").html()
             : response;
         $("#modalFormContainer").html(formHtml);
+
+        // Re-attach GPA change handler after loading
+        setTimeout(function () {
+          if ($('#gpaInput').length) {
+            $('#gpaInput').on('change', function () {
+              var gpa = parseFloat($(this).val());
+              var btn = $('#submitBtn');
+              var warning = $('#eligibilityWarning');
+
+              if (!isNaN(gpa) && gpa >= 1.0 && gpa <= 2.5) {
+                btn.prop('disabled', false).css({ opacity: '1', cursor: 'pointer' });
+                warning.hide();
+              } else if (!isNaN(gpa)) {
+                btn.prop('disabled', true).css({ opacity: '0.7', cursor: 'not-allowed' });
+                warning.show();
+              } else {
+                btn.prop('disabled', true).css({ opacity: '0.7', cursor: 'not-allowed' });
+                warning.hide();
+              }
+            });
+          }
+        }, 100);
       },
       error: function () {
         $("#modalFormContainer").html(
@@ -18,21 +40,6 @@ $(document).ready(function () {
         );
       },
     });
-  });
-
-  $(document).on("input change", "#gpaInput", function () {
-    const gpa = parseFloat($(this).val());
-    const btn = $("#submitBtn");
-    const warning = $("#eligibilityWarning");
-
-    if (gpa >= 1.0 && gpa <= 2.5) {
-      btn.prop("disabled", false).css({ opacity: "1", cursor: "pointer" });
-      warning.hide();
-    } else {
-      btn.prop("disabled", true).css({ opacity: "0.7", cursor: "not-allowed" });
-      if ($(this).val() !== "") warning.show();
-      else warning.hide();
-    }
   });
 
   $(".btn-green").on("click", function (e) {
@@ -69,14 +76,20 @@ $(document).ready(function () {
       success: function (res) {
         if (res.includes("successModalContent")) {
           $("#modalFormContainer").html(res);
-          $("#applyModal .modal-header h3").text("Submission Successful");
+          $("#applyModal .modal-header h3").text("Application Submitted");
+        } else if (res.includes("errorModalContent")) {
+          $("#modalFormContainer").html(res);
+          $("#applyModal .modal-header h3").text("Submission Error");
+          submitBtn.text(originalText).prop("disabled", false);
         } else {
-          alert("Submission failed. Please check your data.");
+          $("#modalFormContainer").html('<div class="error-container">' + res + '</div>');
           submitBtn.text(originalText).prop("disabled", false);
         }
       },
       error: function () {
-        alert("Server error. Ensure XAMPP/Apache is running.");
+        $("#modalFormContainer").html(
+          '<p style="color:red; text-align:center;">Server error. Please try again.</p>'
+        );
         submitBtn.text(originalText).prop("disabled", false);
       },
     });
@@ -99,36 +112,6 @@ $(document).ready(function () {
     });
   });
 
-  $(document).on("submit", "#profileForm", function (e) {
-    e.preventDefault();
-    const formData = new FormData(this);
-    formData.append("update_profile", true);
-    const saveBtn = $("#saveProfileBtn");
-    const originalText = saveBtn.text();
-
-    saveBtn.text("Updating...").prop("disabled", true);
-    $.ajax({
-      url: "profile.php",
-      type: "POST",
-      data: formData,
-      processData: false,
-      contentType: false,
-      success: function (res) {
-        if (res.includes("profileSuccessContent")) {
-          $("#profileModalContainer").html(res);
-          $("#profileModal .modal-header h3").text("Update Successful");
-        } else {
-          alert("Update failed. Please try again.");
-          saveBtn.text(originalText).prop("disabled", false);
-        }
-      },
-      error: function () {
-        alert("Server error. Could not update profile.");
-        saveBtn.text(originalText).prop("disabled", false);
-      },
-    });
-  });
-
   $("#openRegModal").on("click", function () {
     $("#registerModal").show();
   });
@@ -142,6 +125,9 @@ $(document).ready(function () {
     function () {
       $(".modal").fadeOut(300);
       $("#registerModal").hide();
+      if ($("#successModalContent").length) {
+        forceReloadLatestApplicationStatus();
+      }
     },
   );
 
@@ -149,6 +135,48 @@ $(document).ready(function () {
     if ($(e.target).hasClass("modal")) {
       $(".modal").fadeOut(300);
       $("#registerModal").hide();
+      if ($("#successModalContent").length) {
+        forceReloadLatestApplicationStatus();
+      }
     }
   });
+
+  let lastAppId = null;
+  let lastAppStatus = null;
+  let lastHistorySig = null;
+
+  function forceReloadLatestApplicationStatus() {
+    lastAppId = null;
+    lastAppStatus = null;
+    lastHistorySig = null;
+    checkStudentApplicationChanges();
+  }
+
+  function checkStudentApplicationChanges() {
+    $.getJSON("?check_student_apps=1", function (data) {
+      if (lastAppId === null && lastAppStatus === null && lastHistorySig === null) {
+        lastAppId = data.latest_id;
+        lastAppStatus = data.latest_status;
+        lastHistorySig = data.history_signature;
+        return;
+      }
+
+      if (data.latest_id !== lastAppId) {
+        location.reload();
+        return;
+      }
+
+      if (data.latest_status !== lastAppStatus) {
+        location.reload();
+        return;
+      }
+
+      if (data.history_signature !== lastHistorySig) {
+        location.reload();
+        return;
+      }
+    });
+  }
+
+  setInterval(checkStudentApplicationChanges, 5000);
 });

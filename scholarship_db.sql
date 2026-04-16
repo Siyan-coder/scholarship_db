@@ -34,3 +34,11 @@ CREATE TABLE scholarship_applications (
   application_date timestamp NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- Fix: prevent duplicate pending applications per student per scholarship type
+ALTER TABLE scholarship_applications
+ADD CONSTRAINT uq_pending_application
+UNIQUE (student_id, scholarship_type, status);
+
+INSERT INTO `students` (`student_id`, `full_name`, `email`, `password`, `course`, `year_level`, `contact_number`, `address`) 
+VALUES ('2024100000', 'Juan Dela Cruz', 'juandc@gmail.com', 'juan1234', 'BS in Information Technology (BSIT)', '2nd Year', '09771234567', 'Malolos, Bulacan')

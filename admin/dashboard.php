@@ -4,190 +4,176 @@ if (!isset($_SESSION['admin_logged_in'])) {
     header('Location: login.php');
     exit();
 }
-
 include '../config/database.php';
 
-if (isset($_POST['update_status'])) {
-    $app_id = $_POST['app_id'];
-    $new_status = $_POST['new_status'];
-    
-    $sql = "UPDATE scholarship_applications SET status = ? WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("si", $new_status, $app_id);
-    $stmt->execute();
-    $stmt->close();
-    
-    header('Location: dashboard.php');
+
+if (isset($_GET['check_new'])) {
+    $result = $conn->query("SELECT MAX(id) AS latest_id FROM scholarship_applications");
+    $row = $result->fetch_assoc();
+
+    echo json_encode([
+        'latest_id' => (int) $row['latest_id']
+    ]);
     exit();
 }
 
-if (isset($_GET['delete'])) {
-    $app_id = $_GET['delete'];
-    $sql = "DELETE FROM scholarship_applications WHERE id = ?";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("i", $app_id);
-    $stmt->execute();
-    $stmt->close();
-    header('Location: dashboard.php');
+
+if (isset($_GET['chart_course'])) {
+    $course = $_GET['course'] ?? '';
+
+    $sql = "SELECT course, COUNT(*) as total FROM scholarship_applications";
+    if ($course) {
+        $sql .= " WHERE course = '" . $conn->real_escape_string($course) . "'";
+    }
+    $sql .= " GROUP BY course";
+
+    $res = $conn->query($sql);
+    $data = [];
+
+    while ($row = $res->fetch_assoc()) {
+        $data[] = $row;
+    }
+
+    echo json_encode($data);
     exit();
 }
 
-$search = isset($_GET['search']) ? $_GET['search'] : '';
-$status_filter = isset($_GET['status_filter']) ? $_GET['status_filter'] : '';
-$course_filter = isset($_GET['course_filter']) ? $_GET['course_filter'] : '';
+// Chart data: Status distribution
+if (isset($_GET['chart_status'])) {
+    $res = $conn->query("
+        SELECT status, COUNT(*) as total
+        FROM scholarship_applications
+        GROUP BY status
+    ");
 
-$sql = "SELECT * FROM scholarship_applications WHERE eligibility = 'eligible' AND 1=1";
-if (!empty($search)) {
-    $sql .= " AND full_name LIKE '%" . $conn->real_escape_string($search) . "%'";
+    $data = [];
+    while ($row = $res->fetch_assoc()) {
+        $data[] = $row;
+    }
+
+    echo json_encode($data);
+    exit();
 }
-if (!empty($status_filter)) {
-    $sql .= " AND status = '" . $conn->real_escape_string($status_filter) . "'";
-}
-if (!empty($course_filter)) {
-    $sql .= " AND course = '" . $conn->real_escape_string($course_filter) . "'";
-}
-$sql .= " ORDER BY application_date DESC";
 
-$result = $conn->query($sql);
 
-$total_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE eligibility = 'eligible'")->fetch_assoc()['total'];
-$pending_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE eligibility = 'eligible' AND status='Pending'")->fetch_assoc()['total'];
-$approved_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE eligibility = 'eligible' AND status='Approved'")->fetch_assoc()['total'];
-$rejected_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE eligibility = 'eligible' AND status='Rejected'")->fetch_assoc()['total'];
 
-$courses_result = $conn->query("SELECT DISTINCT course FROM scholarship_applications WHERE eligibility = 'eligible' ORDER BY course");
+
+
+$total_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications")->fetch_assoc()['total'];
+$pending_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE status='Pending'")->fetch_assoc()['total'];
+$approved_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE status='Approved'")->fetch_assoc()['total'];
+$rejected_apps = $conn->query("SELECT COUNT(*) as total FROM scholarship_applications WHERE status='Rejected'")->fetch_assoc()['total'];
+
+$courses_result = $conn->query("SELECT DISTINCT course FROM scholarship_applications ORDER BY course");
+
 ?>
 <!DOCTYPE html>
 <html>
+
 <head>
-    <title>Admin Dashboard - Scholarship Management</title>
-    <link rel="stylesheet" href="../style/style.css">
-    <style>
-        .admin-header {
-            background-color: #2c3e50;
-            color: white;
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .admin-header a {
-            color: white;
-            text-decoration: none;
-        }
-        .filter-bar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-            flex-wrap: wrap;
-        }
-        .filter-bar input, .filter-bar select {
-            width: auto;
-            padding: 8px;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .stat-card {
-            background: #3498db;
-            color: white;
-            padding: 15px;
-            text-align: center;
-            border-radius: 8px;
-        }
-        .action-buttons {
-            display: flex;
-            gap: 5px;
-        }
-        .btn-small {
-            padding: 5px 10px;
-            font-size: 12px;
-        }
-        .btn-approve { background-color: #2ecc71; }
-        .btn-reject { background-color: #e74c3c; }
-        .btn-delete { background-color: #95a5a6; }
-    </style>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="../admin/style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="script.js"></script>
 </head>
+
 <body>
-    <div class="admin-header">
-        <h2>Admin Dashboard - Scholarship Management</h2>
-        <a href="logout.php">Logout</a>
+    <div class="admin-layout">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <span class="logo-text">SCHOLARSHIP
+                        MANAGEMENT
+                    </span>
+                </div>
+            </div>
+            <nav class="sidebar-menu">
+                <a href="#" class="menu-item active" data-section="dashboard">
+                    <span class="menu-text">Dashboard</span>
+                </a>
+                <a href="#" class="menu-item" data-section="applications">
+                    <span class="menu-text">Applications</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="#" id="btn-logout" class="menu-item">
+                    <span class="menu-text">Logout</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Top Header -->
+            <div class="top-header">
+                <h1>Dashboard</h1>
+                <div class="header-right">
+                    <div class="user-profile">
+                        <span class="username">Admin User</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="content-area" id="page-content">
+                <!-- Initial dashboard content loaded here -->
+                <!-- Stat Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card stat-card-blue">
+                        <div class="stat-label">Total Applications</div>
+                        <div class="stat-value"><?= $total_apps ?></div>
+                    </div>
+                    <div class="stat-card stat-card-orange">
+                        <div class="stat-label">Total Pending Applications</div>
+                        <div class="stat-value"><?= $pending_apps ?></div>
+                    </div>
+                    <div class="stat-card stat-card-green">
+                        <div class="stat-label">Total Approved Applications</div>
+                        <div class="stat-value"><?= $approved_apps ?></div>
+                    </div>
+                    <div class="stat-card stat-card-red">
+                        <div class="stat-label">Total Rejected Applications</div>
+                        <div class="stat-value"><?= $rejected_apps ?></div>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="charts-grid">
+                    <div class="card chart-card">
+                        <h3>Total Applications per Course</h3>
+                        <select id="courseFilter">
+                            <option value="">All Courses</option>
+                            <?php $courses_result->data_seek(0); while ($c = $courses_result->fetch_assoc()): ?>
+                                <option value="<?= $c['course'] ?>">
+                                    <?= $c['course'] ?>
+                                </option>
+                            <?php endwhile; ?>
+                        </select>
+                        <canvas id="courseChart"></canvas>
+                    </div>
+
+                    <div class="card chart-card">
+                        <h3>Application Status Distribution</h3>
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    
-    <div class="container">
-        <div class="stats">
-            <div class="stat-card">Total Applications: <?php echo $total_apps; ?></div>
-            <div class="stat-card" style="background-color: #f39c12;">Pending: <?php echo $pending_apps; ?></div>
-            <div class="stat-card" style="background-color: #2ecc71;">Approved: <?php echo $approved_apps; ?></div>
-            <div class="stat-card" style="background-color: #e74c3c;">Rejected: <?php echo $rejected_apps; ?></div>
-        </div>
-        
-        <div class="card">
-            <h3>Search and Filter Applications</h3>
-            <form method="GET" class="filter-bar">
-                <input type="text" name="search" placeholder="Search by student name" value="<?php echo htmlspecialchars($search); ?>">
-                <select name="status_filter">
-                    <option value="">All Status</option>
-                    <option value="Pending" <?php if($status_filter=='Pending') echo 'selected'; ?>>Pending</option>
-                    <option value="Approved" <?php if($status_filter=='Approved') echo 'selected'; ?>>Approved</option>
-                    <option value="Rejected" <?php if($status_filter=='Rejected') echo 'selected'; ?>>Rejected</option>
-                </select>
-                <select name="course_filter">
-                    <option value="">All Courses</option>
-                    <?php while($row = $courses_result->fetch_assoc()): ?>
-                    <option value="<?php echo htmlspecialchars($row['course']); ?>" <?php if($course_filter==$row['course']) echo 'selected'; ?>><?php echo htmlspecialchars($row['course']); ?></option>
-                    <?php endwhile; ?>
-                </select>
-                <button type="submit">Filter</button>
-                <a href="dashboard.php" class="btn" style="background-color: #95a5a6;">Reset</a>
-            </form>
-        </div>
-        
-        <div class="card">
-            <h3>All Scholarship Applications (Eligible Only)</h3>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th><th>Name</th><th>Student ID</th><th>Course</th><th>GPA</th><th>Eligibility</th><th>Status</th><th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php if($result && $result->num_rows > 0): ?>
-                    <?php while($row = $result->fetch_assoc()): ?>
-                    <tr>
-                        <td><?php echo $row['id']; ?></td>
-                        <td><?php echo htmlspecialchars($row['full_name']); ?></td>
-                        <td><?php echo htmlspecialchars($row['student_id']); ?></td>
-                        <td><?php echo htmlspecialchars($row['course']); ?></td>
-                        <td><?php echo $row['gpa']; ?></td>
-                        <td class="<?php echo ($row['eligibility']=='eligible')?'qualified':'not-qualified'; ?>"><?php echo $row['eligibility']; ?></td>
-                        <td><span class="status-<?php echo strtolower($row['status']); ?>"><?php echo $row['status']; ?></span></td>
-                        <td class="action-buttons">
-                            <form method="POST" style="display:inline;">
-                                <input type="hidden" name="app_id" value="<?php echo $row['id']; ?>">
-                                <input type="hidden" name="new_status" value="Approved">
-                                <button type="submit" name="update_status" class="btn-small btn-approve">Approve</button>
-                            </form>
-                            <form method="POST" style="display:inline;">
-                                <input type="hidden" name="app_id" value="<?php echo $row['id']; ?>">
-                                <input type="hidden" name="new_status" value="Rejected">
-                                <button type="submit" name="update_status" class="btn-small btn-reject">Reject</button>
-                            </form>
-                            <a href="?delete=<?php echo $row['id']; ?>" class="btn-small btn-delete" onclick="return confirm('Delete this application?');">Delete</a>
-                            <a href="view_details.php?id=<?php echo $row['id']; ?>" class="btn-small" style="background-color: #3498db;">View</a>
-                        </td>
-                    </tr>
-                    <?php endwhile; ?>
-                    <?php else: ?>
-                    <tr><td colspan="8">No eligible applications found</td></tr>
-                    <?php endif; ?>
-                </tbody>
-            </table>
+
+    <div id="bgModal" class="bgModal">
+        <div id="modal" class="modal">
+            <div id="modal-content">
+                <div id="modal-body">
+                </div>
+            </div>
         </div>
     </div>
+
 </body>
+
 </html>
 <?php $conn->close(); ?>
